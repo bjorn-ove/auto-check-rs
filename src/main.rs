@@ -1,5 +1,7 @@
 #![deny(warnings)]
-#![deny(clippy::all)]
+#![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
+
+extern crate notify;
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};

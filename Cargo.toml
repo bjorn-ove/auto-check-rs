@@ -7,7 +7,7 @@ readme = "README.md"
 categories = ["command-line-utilities", "development-tools"]
 license = "MIT OR Apache-2.0"
 authors = ["Bjorn Ove Hay Andersen <bjrnove@gmail.com>"]
-edition = "2018"
+#edition = "2018"
 
 [dependencies]
 notify = "4.0"
