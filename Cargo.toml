@@ -1,0 +1,16 @@
+[package]
+name = "auto-check-rs"
+version = "0.1.0"
+description = "automatically build, check and test code when it changes"
+repository = "https://github.com/BearOve/auto-check-rs"
+readme = "README.md"
+categories = ["command-line-utilities", "development-tools"]
+license = "MIT OR Apache-2.0"
+authors = ["Bjorn Ove Hay Andersen <bjrnove@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+notify = "4.0"
+docopt = "1.0"
+log = "0.4"
+pretty_env_logger = "0.2"
