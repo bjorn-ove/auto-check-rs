@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/BearOve/auto-check-rs.svg?branch=master)](https://travis-ci.org/BearOve/auto-check-rs)
+
 # auto-check-rs
 
 This is a simple tool designed to run in a split pane next to the editor to automatically build, check and test the code.
