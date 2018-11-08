@@ -1,5 +1,5 @@
 [![Build Status](https://travis-ci.org/BearOve/auto-check-rs.svg?branch=master)](https://travis-ci.org/BearOve/auto-check-rs)
-![crates.io](https://meritbadge.herokuapp.com/auto-check-rs)](https://crates.io/crates/auto-check-rs)
+[![crates.io](https://meritbadge.herokuapp.com/auto-check-rs)](https://crates.io/crates/auto-check-rs)
 
 # auto-check-rs
 
