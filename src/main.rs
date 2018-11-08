@@ -58,7 +58,7 @@ impl Changes {
             },
             Err(_) => {
                 log::error!("Ignoring unknown path: {}", fpath.to_string_lossy());
-            }
+            },
         }
     }
 
@@ -104,7 +104,10 @@ fn main() {
     commands_to_run.push(vec!["cargo".into(), "clippy".into()]);
     commands_to_run.push(vec!["cargo".into(), "test".into()]);
 
-    let delay_ms: u64 = args.get_str("--delay").parse().expect("Expected positive number for --delay");
+    let delay_ms: u64 = args
+        .get_str("--delay")
+        .parse()
+        .expect("Expected positive number for --delay");
     let delay = std::time::Duration::from_millis(delay_ms);
 
     let (inotify_tx, inotify_rx) = std::sync::mpsc::channel();
@@ -112,7 +115,9 @@ fn main() {
 
     let mut watcher = notify::watcher(inotify_tx, std::time::Duration::from_millis(100))
         .expect("Failed to initialize inotify watcher");
-    watcher.watch(&crate_dir, notify::RecursiveMode::Recursive).expect("Failed to add watch");
+    watcher
+        .watch(&crate_dir, notify::RecursiveMode::Recursive)
+        .expect("Failed to add watch");
 
     let mut changes = Changes::new(&crate_dir);
     let ignore_changes = changes.ignore_changes.clone();
@@ -167,7 +172,9 @@ fn main() {
             Ok(Rescan) => log::warn!("Some issue detected, rescanning all watches"),
             Ok(Error(e, fpath)) => log::error!("{:?} ({:?})", e, fpath),
             Err(Timeout) => {
-                change_tx.send(changes.flush()).expect("Failed to publish changed files");
+                change_tx
+                    .send(changes.flush())
+                    .expect("Failed to publish changed files");
             },
             Err(e) => panic!("inotify channel died: {:?}", e),
         }
