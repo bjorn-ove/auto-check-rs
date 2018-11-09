@@ -21,11 +21,23 @@ Options:
     --version                       Show version.
     -v --verbose                    Increase the verbosity level, default is only errors
     --delay=MS                      Delay in milliseconds before triggering [default: 1000]
+    -c --custom-cmd=CMD             Run the specified command without arguments after the other checks
+    --no-run-first                  Don't always run once after startup, wait for a change
+    --no-check                      Don't run cargo check
+    --no-clippy                     Don't run cargo clippy
+    --no-test                       Don't run cargo test
 ";
+
+enum Action {
+    Nothing,
+    Custom(String),
+    FilesChanged(Vec<PathBuf>),
+}
 
 struct Changes {
     base_dir: PathBuf,
     ignore_changes: Arc<AtomicBool>,
+    custom: Option<String>,
     changed: BTreeSet<PathBuf>,
 }
 
@@ -36,8 +48,13 @@ impl Changes {
         Changes {
             base_dir,
             ignore_changes: Default::default(),
+            custom: None,
             changed: Default::default(),
         }
+    }
+
+    fn add_custom<T: Into<String>>(&mut self, reason: T) {
+        self.custom = Some(reason.into());
     }
 
     fn add<P: AsRef<Path>>(&mut self, fpath: &P) {
@@ -47,13 +64,11 @@ impl Changes {
             Ok(fpath) => {
                 if fpath.starts_with("target/") {
                     log::trace!("Ignoring path inside target/: {}", fpath.to_string_lossy());
+                } else if ignore {
+                    log::debug!("Ignored change: {}", fpath.to_string_lossy());
                 } else {
-                    if ignore {
-                        log::debug!("Ignored change: {}", fpath.to_string_lossy());
-                    } else {
-                        log::debug!("Detected change: {}", fpath.to_string_lossy());
-                        self.changed.insert(fpath.into());
-                    }
+                    log::debug!("Detected change: {}", fpath.to_string_lossy());
+                    self.changed.insert(fpath.into());
                 }
             },
             Err(_) => {
@@ -62,13 +77,22 @@ impl Changes {
         }
     }
 
-    fn flush(&mut self) -> Vec<PathBuf> {
-        let mut changed = BTreeSet::new();
-        std::mem::swap(&mut changed, &mut self.changed);
-        if !changed.is_empty() {
+    fn take_current_action(&mut self) -> Action {
+        if let Some(reason) = self.custom.take() {
+            // Return the custom reason for running
+            self.changed = BTreeSet::new(); // Ignore any changes up until now
             self.ignore_changes.store(true, Ordering::Relaxed);
+            Action::Custom(reason)
+        } else if !self.changed.is_empty() {
+            // Return the list of changed files
+            let mut changed = BTreeSet::new();
+            std::mem::swap(&mut changed, &mut self.changed);
+            self.ignore_changes.store(true, Ordering::Relaxed);
+            Action::FilesChanged(changed.into_iter().collect())
+        } else {
+            // There is nothing to do here
+            Action::Nothing
         }
-        changed.into_iter().collect()
     }
 }
 
@@ -78,14 +102,6 @@ fn main() {
     let args = docopt::Docopt::new(USAGE)
         .and_then(|d| d.parse())
         .unwrap_or_else(|e| e.exit());
-
-    let mut crate_dir = std::path::PathBuf::from(args.get_str("<crate-dir>"));
-
-    if crate_dir.is_relative() {
-        let mut tmp = std::env::current_dir().expect("Failed to get the current directory");
-        tmp.push(crate_dir);
-        crate_dir = tmp;
-    }
 
     pretty_env_logger::formatted_builder()
         .unwrap()
@@ -98,11 +114,43 @@ fn main() {
         })
         .init();
 
+    let mut crate_dir = std::path::PathBuf::from(args.get_str("<crate-dir>"));
+
+    if crate_dir.is_relative() {
+        let mut tmp = std::env::current_dir().expect("Failed to get the current directory");
+        tmp.push(crate_dir);
+        crate_dir = tmp;
+        log::debug!("Using crate directory: {}", crate_dir.to_string_lossy());
+    }
+
     let mut commands_to_run: Vec<Vec<String>> = Vec::new();
 
-    commands_to_run.push(vec!["cargo".into(), "check".into()]);
-    commands_to_run.push(vec!["cargo".into(), "clippy".into()]);
-    commands_to_run.push(vec!["cargo".into(), "test".into()]);
+    if !args.get_bool("--no-check") {
+        commands_to_run.push(vec!["cargo".into(), "check".into()]);
+    }
+
+    if !args.get_bool("--no-clippy") {
+        commands_to_run.push(vec![
+            "cargo".into(),
+            "clippy".into(),
+            "--all-targets".into(),
+            "--all-features".into(),
+        ]);
+    }
+
+    if !args.get_bool("--no-test") {
+        commands_to_run.push(vec!["cargo".into(), "test".into()]);
+    }
+
+    let custom_cmd = args.get_str("--custom-cmd");
+    if !custom_cmd.is_empty() {
+        commands_to_run.push(vec![custom_cmd.into()]);
+    }
+
+    if commands_to_run.is_empty() {
+        log::error!("Cowardly refusing to start because there is no commands to run");
+        std::process::exit(1);
+    }
 
     let delay_ms: u64 = args
         .get_str("--delay")
@@ -111,7 +159,7 @@ fn main() {
     let delay = std::time::Duration::from_millis(delay_ms);
 
     let (inotify_tx, inotify_rx) = std::sync::mpsc::channel();
-    let (change_tx, change_rx) = std::sync::mpsc::channel::<Vec<PathBuf>>();
+    let (action_tx, action_rx) = std::sync::mpsc::channel::<Action>();
 
     let mut watcher = notify::watcher(inotify_tx, std::time::Duration::from_millis(100))
         .expect("Failed to initialize inotify watcher");
@@ -123,11 +171,27 @@ fn main() {
     let ignore_changes = changes.ignore_changes.clone();
 
     std::thread::spawn(move || {
-        for current_paths in change_rx.iter() {
-            if !current_paths.is_empty() {
-                log::info!("Detected change: {:?}", current_paths);
+        for action in action_rx.iter() {
+            let mut run_commands;
+
+            match action {
+                Action::Nothing => {
+                    log::trace!("No changes detected");
+                    run_commands = false;
+                },
+                Action::Custom(reason) => {
+                    log::info!("{}", reason);
+                    run_commands = true;
+                },
+                Action::FilesChanged(current_paths) => {
+                    log::info!("Detected change: {:?}", current_paths);
+                    run_commands = true;
+                },
+            }
+
+            if run_commands {
                 'command_loop: for cmd in commands_to_run.iter() {
-                    println!("");
+                    println!();
                     log::info!("Running command {:?}", cmd);
                     let mut command = std::process::Command::new(&cmd[0]);
                     command.current_dir(&crate_dir);
@@ -148,11 +212,15 @@ fn main() {
                         },
                     }
                 }
-                println!("");
+                println!();
                 ignore_changes.store(false, Ordering::Relaxed);
             }
         }
     });
+
+    if !args.get_bool("--no-run-first") {
+        changes.add_custom("Initial check");
+    }
 
     loop {
         use notify::DebouncedEvent::*;
@@ -172,9 +240,9 @@ fn main() {
             Ok(Rescan) => log::warn!("Some issue detected, rescanning all watches"),
             Ok(Error(e, fpath)) => log::error!("{:?} ({:?})", e, fpath),
             Err(Timeout) => {
-                change_tx
-                    .send(changes.flush())
-                    .expect("Failed to publish changed files");
+                action_tx
+                    .send(changes.take_current_action())
+                    .expect("Failed to publish action");
             },
             Err(e) => panic!("inotify channel died: {:?}", e),
         }
