@@ -1,6 +1,6 @@
 [package]
 name = "auto-check-rs"
-version = "0.2.1"
+version = "0.3.0"
 description = "automatically build, check and test code when it changes"
 repository = "https://github.com/BearOve/auto-check-rs"
 readme = "README.md"
@@ -17,3 +17,4 @@ notify = "4.0"
 docopt = "1.0"
 log = "0.4"
 pretty_env_logger = "0.2"
+ignore = "0.4"

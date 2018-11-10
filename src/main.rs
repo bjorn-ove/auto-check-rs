@@ -2,12 +2,17 @@
 #![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
 
 extern crate notify;
+extern crate ignore;
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use notify::Watcher;
+use ignore::{
+    Match,
+    gitignore::{Gitignore, GitignoreBuilder},
+};
 
 const USAGE: &str = "auto-check-rs
 
@@ -36,17 +41,19 @@ enum Action {
 
 struct Changes {
     base_dir: PathBuf,
+    gitignore: Gitignore,
     ignore_changes: Arc<AtomicBool>,
     custom: Option<String>,
     changed: BTreeSet<PathBuf>,
 }
 
 impl Changes {
-    fn new<P: Into<PathBuf>>(base_dir: P) -> Changes {
+    fn new<P: Into<PathBuf>>(base_dir: P, gitignore: Gitignore) -> Changes {
         let base_dir = base_dir.into();
         assert!(base_dir.is_absolute());
         Changes {
             base_dir,
+            gitignore,
             ignore_changes: Default::default(),
             custom: None,
             changed: Default::default(),
@@ -61,15 +68,18 @@ impl Changes {
         let ignore = self.ignore_changes.load(Ordering::Relaxed);
         let fpath = fpath.as_ref();
         match fpath.strip_prefix(&self.base_dir) {
-            Ok(fpath) => {
-                if fpath.starts_with("target/") {
-                    log::trace!("Ignoring path inside target/: {}", fpath.to_string_lossy());
-                } else if ignore {
-                    log::debug!("Ignored change: {}", fpath.to_string_lossy());
-                } else {
-                    log::debug!("Detected change: {}", fpath.to_string_lossy());
-                    self.changed.insert(fpath.into());
-                }
+            Ok(fpath) => match self.gitignore.matched_path_or_any_parents(fpath, false) {
+                Match::Ignore(_) => {
+                    log::trace!("Ignoring path from .gitignore: {}", fpath.to_string_lossy());
+                },
+                Match::Whitelist(_) | Match::None => {
+                    if ignore {
+                        log::debug!("Ignored change: {}", fpath.to_string_lossy());
+                    } else {
+                        log::debug!("Detected change: {}", fpath.to_string_lossy());
+                        self.changed.insert(fpath.into());
+                    }
+                },
             },
             Err(_) => {
                 log::error!("Ignoring unknown path: {}", fpath.to_string_lossy());
@@ -123,6 +133,18 @@ fn main() {
         log::debug!("Using crate directory: {}", crate_dir.to_string_lossy());
     }
 
+    let gitignore = {
+        let mut builder = GitignoreBuilder::new(&crate_dir);
+        // The .git directory is currently not ignored, and
+        // there is no way of initializing it like git would yet.
+        // See: https://github.com/BurntSushi/ripgrep/issues/1040
+        builder
+            .add_line(None, "**/.git")
+            .expect("Failed to add .git to ignore list");
+        builder.add(".gitignore");
+        builder.build().expect("Failed to load .gitignore")
+    };
+
     let mut commands_to_run: Vec<Vec<String>> = Vec::new();
 
     if !args.get_bool("--no-check") {
@@ -167,7 +189,7 @@ fn main() {
         .watch(&crate_dir, notify::RecursiveMode::Recursive)
         .expect("Failed to add watch");
 
-    let mut changes = Changes::new(&crate_dir);
+    let mut changes = Changes::new(&crate_dir, gitignore);
     let ignore_changes = changes.ignore_changes.clone();
 
     std::thread::spawn(move || {
