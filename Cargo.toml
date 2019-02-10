@@ -1,6 +1,6 @@
 [package]
 name = "auto-check-rs"
-version = "0.3.0"
+version = "0.3.1"
 description = "automatically build, check and test code when it changes"
 repository = "https://github.com/BearOve/auto-check-rs"
 readme = "README.md"
