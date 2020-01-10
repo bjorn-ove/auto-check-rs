@@ -20,7 +20,7 @@ dependencies = [
 
 [[package]]
 name = "auto-check-rs"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "docopt 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
