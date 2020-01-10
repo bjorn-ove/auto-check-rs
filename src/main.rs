@@ -113,9 +113,8 @@ fn main() {
         .and_then(|d| d.parse())
         .unwrap_or_else(|e| e.exit());
 
-    pretty_env_logger::formatted_builder()
-        .unwrap()
-        .filter_level(match args.get_count("--verbose") {
+    env_logger::builder()
+        .filter(None, match args.get_count("--verbose") {
             0 => log::LevelFilter::Error,
             1 => log::LevelFilter::Warn,
             2 => log::LevelFilter::Info,
@@ -194,22 +193,20 @@ fn main() {
 
     std::thread::spawn(move || {
         for action in action_rx.iter() {
-            let mut run_commands;
-
-            match action {
+            let run_commands = match action {
                 Action::Nothing => {
                     log::trace!("No changes detected");
-                    run_commands = false;
+                    false
                 },
                 Action::Custom(reason) => {
                     log::info!("{}", reason);
-                    run_commands = true;
+                    true
                 },
                 Action::FilesChanged(current_paths) => {
                     log::info!("Detected change: {:?}", current_paths);
-                    run_commands = true;
+                    true
                 },
-            }
+            };
 
             if run_commands {
                 'command_loop: for cmd in commands_to_run.iter() {
