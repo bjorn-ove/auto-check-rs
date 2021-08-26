@@ -1,5 +1,9 @@
-[![Build Status](https://travis-ci.org/BearOve/auto-check-rs.svg?branch=master)](https://travis-ci.org/BearOve/auto-check-rs)
-[![crates.io](https://meritbadge.herokuapp.com/auto-check-rs)](https://crates.io/crates/auto-check-rs)
+# Deprecated
+
+Instead of using this crate you should switch to [cargo watch](https://crates.io/crates/cargo-watch) instead. It does the same
+thing, but better.
+
+If anyone needs this crate for some better purpose contact me as I don't intend to update it anymore
 
 # auto-check-rs
 

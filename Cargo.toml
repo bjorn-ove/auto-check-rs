@@ -1,7 +1,7 @@
 [package]
 name = "auto-check-rs"
-version = "0.3.2"
-description = "automatically build, check and test code when it changes"
+version = "0.3.3"
+description = "(deprecated) automatically build, check and test code when it changes"
 repository = "https://github.com/BearOve/auto-check-rs"
 readme = "README.md"
 categories = ["command-line-utilities", "development-tools"]
@@ -9,12 +9,9 @@ license = "MIT OR Apache-2.0"
 authors = ["Bjorn Ove Hay Andersen <bjrnove@gmail.com>"]
 edition = "2018"
 
-[badges]
-travis-ci = { repository = "BearOve/auto-check-rs" }
-
 [dependencies]
 notify = "4"
 docopt = "1"
 log = "0.4"
-env_logger = "0.7"
+env_logger = "0.9"
 ignore = "0.4"
